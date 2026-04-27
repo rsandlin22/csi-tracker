@@ -269,6 +269,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--ink)
 .lever-selector-domain{font-size:10px;color:var(--ink-muted);white-space:nowrap}
 .lever-selector-row.selected .lever-selector-name{color:var(--accent);font-weight:600}
 
+/* SGP Growth bars */
+.sgp-row{margin-bottom:18px}
+.sgp-row-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.sgp-row-label{font-size:12px;font-weight:600;color:var(--ink-soft)}
+.sgp-row-meta{font-size:11px;color:var(--ink-muted)}
+.sgp-track{position:relative;height:22px;background:#f0f0f0;border-radius:11px;overflow:visible;margin-bottom:3px}
+.sgp-fill{position:absolute;left:0;top:0;height:100%;border-radius:11px;opacity:.25}
+.sgp-dot{position:absolute;top:50%;transform:translate(-50%,-50%);width:18px;height:18px;border-radius:50%;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,.25);z-index:2;transition:left .6s ease}
+.sgp-star{position:absolute;top:50%;transform:translate(-50%,-50%);font-size:26px;z-index:3;color:#f0c93a;-webkit-text-stroke:1.5px #1a1a1a;text-stroke:1.5px #1a1a1a;filter:drop-shadow(0 1px 3px rgba(0,0,0,.4));transition:left .6s ease;line-height:1}
+.sgp-axis{display:flex;justify-content:space-between;font-size:9px;color:var(--ink-muted);padding:0 2px;margin-top:2px}
+.sgp-legend{display:flex;gap:14px;margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--ink-muted);flex-wrap:wrap}
+.sgp-legend-item{display:flex;align-items:center;gap:5px}
+
 /* MISC */
 .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:.04em}
 .tag-csi-bottom{background:#fee2e2;color:#b91c1c}
@@ -295,7 +308,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--ink)
     <div class="header-logo">IN</div>
     <div>
       <div class="header-title">CSI Portfolio Tracker</div>
-      <div class="header-sub">Indiana OSST &middot; 2024&ndash;25 Academic Year</div>
+      <div class="header-sub">Indiana OSST &middot; 2025&ndash;26 Academic Year</div>
     </div>
   </div>
   <nav class="header-nav">
@@ -330,6 +343,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--ink)
       <div class="demo-card" id="demoRaceCard"></div>
       <div class="demo-card" id="demoSubgroupCard"></div>
     </div>
+    <div style="margin-top:16px">
+      <div class="card" id="enrollmentCard">
+        <div class="card-label">Student Enrollment by Specialist Portfolio</div>
+      </div>
+    </div>
     <div class="section-header" style="margin-top:36px">
       <h2 class="section-title">Academic Performance</h2>
       <div class="section-line"></div>
@@ -343,11 +361,20 @@ body{font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--ink)
         <div class="card-label" style="color:var(--accent);font-size:12px;letter-spacing:.08em">MATH &mdash; ILEARN 2025</div>
       </div>
     </div>
-    <div style="margin-top:16px" class="cards-grid cards-2">
-      <div class="card" id="enrollmentCard">
-        <div class="card-label">Student Enrollment by Specialist Portfolio</div>
+    <div style="margin-top:16px">
+      <div class="card" id="leadershipStabilityCard">
+        <div class="card-label" style="color:var(--accent);font-size:12px;letter-spacing:.08em">School Leadership Stability</div>
       </div>
     </div>
+    <div style="margin-top:16px" class="cards-grid cards-2">
+      <div class="card" id="elaGrowthCard">
+        <div class="card-label" style="color:var(--accent);font-size:12px;letter-spacing:.08em">ELA &mdash; Student Growth (SGP)</div>
+      </div>
+      <div class="card" id="mathGrowthCard">
+        <div class="card-label" style="color:var(--accent);font-size:12px;letter-spacing:.08em">MATH &mdash; Student Growth (SGP)</div>
+      </div>
+    </div>
+
     <div class="section-header" style="margin-top:36px">
       <h2 class="section-title">Leadership Levers &mdash; Portfolio Overview</h2>
       <div class="section-line"></div>
@@ -394,6 +421,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--ink)
 <script>
 // ═══ CONSTANTS ═══
 const STATE_ELA=48.3;
+const STATE_MATH=42.1;
 const SPECIALISTS={
   'DeCaria':{fullName:'DeCaria',region:'Northwest Indiana',initials:'DC'},
   'DaKota':{fullName:'DaKota',region:'Central Indiana',initials:'DK'},
@@ -527,11 +555,22 @@ function renderLanding(){
   const avgEla=elaSchools.length?(elaSchools.reduce((a,s)=>a+s.ep,0)/elaSchools.length).toFixed(1):'--';
   const visited=schools.filter(s=>s.lv).length;
 
+  const mathSchoolsHero=schools.filter(s=>s.mp!==null&&s.mp!==undefined);
+  const avgMathHero=mathSchoolsHero.length?(mathSchoolsHero.reduce((a,s)=>a+s.mp,0)/mathSchoolsHero.length).toFixed(1):'--';
+
   document.getElementById('heroStats').innerHTML=`
     <div class="hero-stat"><div class="hero-stat-val">${total}</div><div class="hero-stat-lbl">CSI Schools</div></div>
     <div class="hero-stat"><div class="hero-stat-val">${(totalEnroll/1000).toFixed(1)}K</div><div class="hero-stat-lbl">Total Students</div></div>
-    <div class="hero-stat"><div class="hero-stat-val">${avgEla}%</div><div class="hero-stat-lbl">Avg. ELA Proficiency</div></div>
-    <div class="hero-stat"><div class="hero-stat-val">${STATE_ELA}%</div><div class="hero-stat-lbl">Indiana State Average</div></div>
+    <div class="hero-stat">
+      <div class="hero-stat-val">${avgEla}%</div>
+      <div class="hero-stat-lbl">Avg. ELA Proficiency</div>
+      <div style="font-size:11px;opacity:.55;margin-top:3px">State avg: ${STATE_ELA}%</div>
+    </div>
+    <div class="hero-stat">
+      <div class="hero-stat-val">${avgMathHero}%</div>
+      <div class="hero-stat-lbl">Avg. Math Proficiency</div>
+      <div style="font-size:11px;opacity:.55;margin-top:3px">State avg: ${STATE_MATH}%</div>
+    </div>
     <div class="hero-stat"><div class="hero-stat-val">${visited}</div><div class="hero-stat-lbl">Schools Visited</div></div>`;
 
   // ID Breakdown
@@ -645,7 +684,6 @@ function renderLanding(){
     +'</div>';
 
   // Performance cards — ELA + Math columns
-  const STATE_MATH=42.1; // Indiana statewide math proficiency ILEARN 2025 (computed from IDOE data)
   const mathSchools=schools.filter(s=>s.mp!==null&&s.mp!==undefined);
   const avgMath=mathSchools.length?(mathSchools.reduce((a,s)=>a+s.mp,0)/mathSchools.length).toFixed(1):'--';
 
@@ -711,6 +749,107 @@ function renderLanding(){
     +'</div></div>'
     +'<div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-muted)">Proficiency Distribution</div>'
     +distBars(mathBuckets);
+
+  // SGP Growth tiles
+  // Fake data: {label, color, priorLevel, medianSGP, targetSGP, n}
+  // Target SGPs: Below needs ~65+ to move up, Approaching ~55+, At ~45+, Above ~40+
+  const elaGrowthData=[
+    {label:'Below Proficiency',   color:'#dc2626', medianSGP:38, targetSGP:65, n:1240, priorPct:4},
+    {label:'Approaching Proficiency', color:'#d97706', medianSGP:44, targetSGP:55, n:890,  priorPct:14},
+    {label:'At Proficiency',      color:'#2563eb', medianSGP:48, targetSGP:45, n:420,  priorPct:28},
+    {label:'Above Proficiency',   color:'#16a34a', medianSGP:52, targetSGP:40, n:210,  priorPct:54},
+  ];
+  const mathGrowthData=[
+    {label:'Below Proficiency',   color:'#dc2626', medianSGP:35, targetSGP:65, n:1380, priorPct:3},
+    {label:'Approaching Proficiency', color:'#d97706', medianSGP:41, targetSGP:55, n:760,  priorPct:12},
+    {label:'At Proficiency',      color:'#2563eb', medianSGP:50, targetSGP:45, n:390,  priorPct:26},
+    {label:'Above Proficiency',   color:'#16a34a', medianSGP:55, targetSGP:40, n:180,  priorPct:52},
+  ];
+
+  function renderSGPCard(elementId, subjectLabel, data){
+    function sgpRow(d){
+      const dotLeft=((d.medianSGP-1)/98*100).toFixed(1);
+      const starLeft=((d.targetSGP-1)/98*100).toFixed(1);
+      const gap=d.medianSGP-d.targetSGP;
+      const gapLabel=gap>=0?'+'+gap+' vs target':gap+' vs target';
+      const gapColor=gap>=0?'#16a34a':'#dc2626';
+      return '<div class="sgp-row">'
+        +'<div class="sgp-row-header">'
+        +'<span class="sgp-row-label">'+d.label+'</span>'
+        +'<span class="sgp-row-meta">Median SGP: <strong style="color:var(--ink)">'+d.medianSGP+'</strong>'
+        +' &nbsp;<span style="color:'+gapColor+';font-weight:600">('+gapLabel+')</span>'
+        +' &nbsp;&middot; '+d.n.toLocaleString()+' students</span>'
+        +'</div>'
+        +'<div class="sgp-track">'
+        +'<div class="sgp-fill" style="width:100%;background:'+d.color+'"></div>'
+        // Median dot
+        +'<div class="sgp-dot" style="left:'+dotLeft+'%;background:'+d.color+'"></div>'
+        // Target star
+        +'<span class="sgp-star" style="left:'+starLeft+'%">★</span>'
+        +'</div>'
+        +'<div class="sgp-axis"><span>1</span><span>25</span><span>50</span><span>75</span><span>99</span></div>'
+        +'</div>';
+    }
+    const rows=data.map(sgpRow).join('');
+    document.getElementById(elementId).innerHTML=
+      '<div class="card-label" style="color:var(--accent);font-size:12px;letter-spacing:.08em">'+subjectLabel+' — Student Growth (SGP)</div>'
+      +'<p style="font-size:11px;color:var(--ink-muted);margin:8px 0 14px">Student Growth Percentile by prior year performance level &middot; SGP 1–99 scale</p>'
+      +rows
+      +'<div class="sgp-legend">'
+      +'<div class="sgp-legend-item"><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:var(--accent);border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.2)"></span>Median SGP (dot)</div>'
+      +'<div class="sgp-legend-item"><span style="font-size:14px;">★</span>Median Growth Target (star)</div>'
+      +'<div class="sgp-legend-item" style="color:#dc2626;font-style:italic">* Placeholder data &mdash; pending real SGP records</div>'
+      +'</div>';
+  }
+
+  renderSGPCard('elaGrowthCard','ELA',elaGrowthData);
+  renderSGPCard('mathGrowthCard','MATH',mathGrowthData);
+
+  // Leadership stability
+  const leadershipData=[
+    {label:'First Year',count:32,color:'#dc2626',desc:'New to role this year'},
+    {label:'Year 2–3',count:33,color:'#d97706',desc:'Building foundation'},
+    {label:'Year 4–5',count:18,color:'#2563eb',desc:'Established leadership'},
+    {label:'Year 5+',count:11,color:'#16a34a',desc:'Experienced, stable'},
+  ];
+  const totalLeadership=leadershipData.reduce((a,b)=>a+b.count,0);
+  const leaderRows=leadershipData.map(function(d){
+    const barPct=d.count/totalLeadership*100;
+    const pctLbl=Math.round(barPct)+'%';
+    return '<div style="margin-bottom:12px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">'
+      +'<div>'
+      +'<span style="font-size:13px;font-weight:600;color:var(--ink)">'+d.label+'</span>'
+      +'<span style="font-size:11px;color:var(--ink-muted);margin-left:8px">'+d.desc+'</span>'
+      +'</div>'
+      +'<span style="font-size:12px;font-weight:700;color:var(--ink)">'+d.count+' <span style="font-weight:400;color:var(--ink-muted)">schools ('+pctLbl+')</span></span>'
+      +'</div>'
+      +'<div style="height:16px;background:#eee;border-radius:6px;overflow:hidden">'
+      +'<div style="width:'+barPct+'%;height:100%;border-radius:6px;background:'+d.color+';transition:width .6s ease"></div>'
+      +'</div></div>';
+  }).join('');
+
+  const stableCount=leadershipData.slice(2).reduce((a,b)=>a+b.count,0);
+  const stablePct=Math.round(stableCount/totalLeadership*100);
+  const newCount=leadershipData.slice(0,2).reduce((a,b)=>a+b.count,0);
+  const newPct=Math.round(newCount/totalLeadership*100);
+
+  document.getElementById('leadershipStabilityCard').innerHTML=
+    '<div class="card-label" style="color:var(--accent);font-size:12px;letter-spacing:.08em">School Leadership Stability</div>'
+    +'<div style="display:flex;gap:24px;margin:12px 0 18px">'
+    +'<div style="text-align:center;padding:10px 18px;background:#fef2f2;border-radius:8px;flex:1">'
+    +'<div class="serif" style="font-size:28px;color:#dc2626;line-height:1">'+newPct+'%</div>'
+    +'<div style="font-size:11px;color:var(--ink-muted);margin-top:3px">New or early-tenure<br>(Year 1–2)</div>'
+    +'</div>'
+    +'<div style="text-align:center;padding:10px 18px;background:#f0fdf4;border-radius:8px;flex:1">'
+    +'<div class="serif" style="font-size:28px;color:#16a34a;line-height:1">'+stablePct+'%</div>'
+    +'<div style="font-size:11px;color:var(--ink-muted);margin-top:3px">Established leadership<br>(Year 4+)</div>'
+    +'</div>'
+    +'</div>'
+    +'<div style="border-top:1px solid var(--border);padding-top:14px">'
+    +leaderRows
+    +'</div>'
+    +'<div style="font-size:10px;color:var(--ink-muted);margin-top:8px;font-style:italic">* Based on 94 CSI portfolio schools &mdash; placeholder data pending IDOE records</div>';
 
   // Enrollment by specialist
   const specColors={'DeCaria':'#1a3a5c','DaKota':'#2563eb','Katie':'#d97706','Kent':'#16a34a','Noah':'#7c3aed','Rahel':'#dc2626'};
