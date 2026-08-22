@@ -1,7 +1,7 @@
 {
-  "name": "csi-portfolio-tracker",
+  "name": "allowance-tracker",
   "version": "1.0.0",
-  "description": "Indiana OSST CSI Portfolio Tracker",
+  "description": "Simple allowance tracking app with a Postgres-backed server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
