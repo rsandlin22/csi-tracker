@@ -12,19 +12,28 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-const QUICK_NOTE_LIMIT = 6;
-const RECENT_TRANSACTION_LIMIT = 50;
-
 // ─── Create tables on startup ─────────────────────────────────────────────────
 async function initDb() {
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS transactions (
-      id          SERIAL PRIMARY KEY,
-      type        TEXT        NOT NULL CHECK (type IN ('credit', 'debit')),
-      amount      NUMERIC(10,2) NOT NULL CHECK (amount > 0),
-      note        TEXT        NOT NULL,
-      created_at  TIMESTAMPTZ DEFAULT NOW()
+    CREATE TABLE IF NOT EXISTS visit_reports (
+      id              SERIAL PRIMARY KEY,
+      school_name     TEXT        NOT NULL,
+      specialist      TEXT        NOT NULL,
+      visit_date      DATE        NOT NULL,
+      visit_type      TEXT,
+      notes           TEXT,
+      ratings         JSONB       DEFAULT '{}',
+      prioritized_levers JSONB   DEFAULT '[]',
+      plan_status     TEXT,
+      priority_notes  TEXT,
+      submitted_at    TIMESTAMPTZ DEFAULT NOW()
     )
+  `);
+
+  // Index for fast school lookups
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_visit_school
+    ON visit_reports (school_name)
   `);
 
   console.log('Database ready.');
@@ -34,89 +43,82 @@ initDb().catch(err => {
   console.error('DB init error (continuing anyway):', err.message);
 });
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-async function getBalance() {
-  const result = await pool.query(`
-    SELECT COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE -amount END), 0) AS balance
-    FROM transactions
-  `);
-  return Number(result.rows[0].balance);
-}
+// ─── API: Save a visit report ─────────────────────────────────────────────────
+app.post('/api/visit', async (req, res) => {
+  const {
+    school_name, specialist, visit_date, visit_type,
+    notes, ratings, prioritized_levers, plan_status, priority_notes
+  } = req.body;
 
-async function getRecentTransactions() {
-  const result = await pool.query(
-    `SELECT id, type, amount, note, created_at
-     FROM transactions
-     ORDER BY created_at DESC, id DESC
-     LIMIT $1`,
-    [RECENT_TRANSACTION_LIMIT]
-  );
-  return result.rows;
-}
+  if (!school_name || !specialist || !visit_date) {
+    return res.status(400).json({ error: 'school_name, specialist, and visit_date are required.' });
+  }
 
-async function getQuickNotes(type) {
-  const result = await pool.query(
-    `SELECT note, COUNT(*) AS uses
-     FROM transactions
-     WHERE type = $1
-     GROUP BY note
-     ORDER BY uses DESC, MAX(created_at) DESC
-     LIMIT $2`,
-    [type, QUICK_NOTE_LIMIT]
-  );
-  return result.rows.map(r => r.note);
-}
-
-async function getState() {
-  const [balance, transactions, creditNotes, debitNotes] = await Promise.all([
-    getBalance(),
-    getRecentTransactions(),
-    getQuickNotes('credit'),
-    getQuickNotes('debit')
-  ]);
-  return {
-    balance,
-    transactions,
-    quickNotes: { credit: creditNotes, debit: debitNotes }
-  };
-}
-
-// ─── API: Get current balance, recent transactions, and quick notes ──────────
-app.get('/api/state', async (req, res) => {
   try {
-    res.json(await getState());
+    const result = await pool.query(
+      `INSERT INTO visit_reports
+        (school_name, specialist, visit_date, visit_type, notes,
+         ratings, prioritized_levers, plan_status, priority_notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, submitted_at`,
+      [
+        school_name, specialist, visit_date, visit_type || null,
+        notes || null,
+        JSON.stringify(ratings || {}),
+        JSON.stringify(prioritized_levers || []),
+        plan_status || null,
+        priority_notes || null
+      ]
+    );
+    res.json({ success: true, id: result.rows[0].id, submitted_at: result.rows[0].submitted_at });
   } catch (err) {
-    console.error('GET /api/state error:', err.message);
-    res.status(500).json({ error: 'Failed to load account state.' });
+    console.error('POST /api/visit error:', err.message);
+    res.status(500).json({ error: 'Failed to save visit report.' });
   }
 });
 
-// ─── API: Record a transaction (credit or debit) ──────────────────────────────
-app.post('/api/transaction', async (req, res) => {
-  const { type, amount, note } = req.body;
-
-  const parsedAmount = Number(amount);
-  const trimmedNote = typeof note === 'string' ? note.trim() : '';
-
-  if (type !== 'credit' && type !== 'debit') {
-    return res.status(400).json({ error: 'type must be "credit" or "debit".' });
-  }
-  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-    return res.status(400).json({ error: 'amount must be a positive number.' });
-  }
-  if (!trimmedNote) {
-    return res.status(400).json({ error: 'note is required.' });
-  }
-
+// ─── API: Get all visit reports (most recent first) ───────────────────────────
+app.get('/api/visits', async (req, res) => {
   try {
-    await pool.query(
-      `INSERT INTO transactions (type, amount, note) VALUES ($1, $2, $3)`,
-      [type, parsedAmount.toFixed(2), trimmedNote]
+    const result = await pool.query(
+      `SELECT * FROM visit_reports ORDER BY submitted_at ASC`
     );
-    res.json(await getState());
+    res.json(result.rows);
   } catch (err) {
-    console.error('POST /api/transaction error:', err.message);
-    res.status(500).json({ error: 'Failed to save transaction.' });
+    console.error('GET /api/visits error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch visits.' });
+  }
+});
+
+// ─── API: Get visits for one school ──────────────────────────────────────────
+app.get('/api/visits/:school', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM visit_reports
+       WHERE school_name = $1
+       ORDER BY visit_date DESC`,
+      [decodeURIComponent(req.params.school)]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('GET /api/visits/:school error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch school visits.' });
+  }
+});
+
+// ─── API: Get visits for one specialist ──────────────────────────────────────
+app.get('/api/specialist/:name', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM visit_reports
+       WHERE specialist = $1
+       ORDER BY visit_date DESC`,
+      [decodeURIComponent(req.params.name)]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('GET /api/specialist/:name error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch specialist visits.' });
   }
 });
 
@@ -133,5 +135,5 @@ app.get('*', (req, res) => {
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Allowance Tracker running on port ${PORT}`);
+  console.log(`CSI Tracker running on port ${PORT}`);
 });
