@@ -9,7 +9,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // PostgreSQL connection — Railway injects DATABASE_URL automatically
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
 // ─── Create tables on startup ─────────────────────────────────────────────────

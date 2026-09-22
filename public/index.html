@@ -254,6 +254,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--ink)
 .form-submit-btn:hover{background:var(--accent-light)}
 .form-success{display:none;background:#dcfce7;border:1px solid #86efac;border-radius:10px;padding:20px;text-align:center;color:#15803d;font-weight:600;margin-top:16px}
 .form-success.show{display:block}
+.form-success.warn{background:#fef3c7;border-color:#fcd34d;color:#92400e}
 
 /* LEVER SELECTOR */
 .lever-priority-check{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-muted);font-weight:500;cursor:pointer;white-space:nowrap;padding:4px 8px;border-radius:6px;border:1.5px solid transparent;transition:color .15s,border-color .15s,background .15s}
@@ -688,13 +689,24 @@ async function initApp(){
         });
         school.prioritizedLevers=prioLevers.length?prioLevers:school.prioritizedLevers;
       });
+    } else {
+      console.warn('Could not load saved visits: server returned',res.status);
+      showLoadWarning();
     }
   }catch(e){
     console.warn('Could not load saved visits (running locally or DB unavailable):',e);
+    showLoadWarning();
   }
 
   renderLanding();
   renderForm();
+}
+
+function showLoadWarning(){
+  const el=document.createElement('div');
+  el.textContent='⚠ Could not reach the server — showing this device’s last-known data, which may be out of date.';
+  el.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#fef3c7;color:#92400e;border-bottom:1px solid #fcd34d;font-weight:600;font-size:13px;text-align:center;padding:8px 12px';
+  document.body.prepend(el);
 }
 
 // ═══ NAV ═══
@@ -1733,6 +1745,7 @@ async function submitSchoolForm(){
   // Disable button while saving
   if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='Saving...';}
 
+  let serverSaveOk=true;
   try{
     const res=await fetch('/api/visit',{
       method:'POST',
@@ -1743,6 +1756,7 @@ async function submitSchoolForm(){
   }catch(e){
     // If server unavailable (local dev / no backend), continue with local-only update
     console.warn('API save failed, updating local state only:',e);
+    serverSaveOk=false;
   }
 
   // Always update local state so UI reflects submission immediately
@@ -1760,7 +1774,14 @@ async function submitSchoolForm(){
   school.prioritizedLevers=Array.from(formState.selectedLevers);
 
   if(submitBtn){submitBtn.disabled=false;submitBtn.textContent='Submit Visit Report';}
-  if(successEl){successEl.classList.add('show');successEl.scrollIntoView({behavior:'smooth'});}
+  if(successEl){
+    successEl.classList.toggle('warn',!serverSaveOk);
+    successEl.textContent=serverSaveOk
+      ? '✓ Visit report submitted. Ratings and priorities saved.'
+      : '⚠ Saved on this device only — server unavailable, so this won’t sync to other devices until it’s back.';
+    successEl.classList.add('show');
+    successEl.scrollIntoView({behavior:'smooth'});
+  }
   renderLanding();
   setTimeout(()=>{if(successEl)successEl.classList.remove('show');},5000);
 }
