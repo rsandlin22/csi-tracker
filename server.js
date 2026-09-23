@@ -3,7 +3,7 @@ const { Pool } = require('pg');
 const path = require('path');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // archive/BOY/EOY payloads carry the full school roster
 app.use(express.static(path.join(__dirname, 'public')));
 
 // PostgreSQL connection — Railway injects DATABASE_URL (or DATABASE_PUBLIC_URL
@@ -40,6 +40,35 @@ async function initDb() {
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_visit_school
     ON visit_reports (school_name)
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS boy_reports (
+      id           SERIAL PRIMARY KEY,
+      specialist   TEXT        NOT NULL,
+      school_year  TEXT        NOT NULL,
+      schools      JSONB       DEFAULT '{}',
+      submitted_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS eoy_reports (
+      id           SERIAL PRIMARY KEY,
+      specialist   TEXT        NOT NULL,
+      school_year  TEXT        NOT NULL,
+      schools      JSONB       DEFAULT '{}',
+      submitted_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS archive_snapshots (
+      id           SERIAL PRIMARY KEY,
+      label        TEXT        NOT NULL,
+      schools      JSONB       NOT NULL,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
+    )
   `);
 
   console.log('Database ready.');
@@ -125,6 +154,101 @@ app.get('/api/specialist/:name', async (req, res) => {
   } catch (err) {
     console.error('GET /api/specialist/:name error:', err.message);
     res.status(500).json({ error: 'Failed to fetch specialist visits.' });
+  }
+});
+
+// ─── API: BOY (Beginning-of-Year) reports ─────────────────────────────────────
+app.post('/api/boy-report', async (req, res) => {
+  const { specialist, school_year, schools } = req.body;
+  if (!specialist || !school_year) {
+    return res.status(400).json({ error: 'specialist and school_year are required.' });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO boy_reports (specialist, school_year, schools)
+       VALUES ($1, $2, $3)
+       RETURNING id, submitted_at`,
+      [specialist, school_year, JSON.stringify(schools || {})]
+    );
+    res.json({ success: true, id: result.rows[0].id, submitted_at: result.rows[0].submitted_at });
+  } catch (err) {
+    console.error('POST /api/boy-report error:', err.message);
+    res.status(500).json({ error: 'Failed to save BOY report.' });
+  }
+});
+
+app.get('/api/boy-reports', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM boy_reports ORDER BY submitted_at ASC`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('GET /api/boy-reports error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch BOY reports.' });
+  }
+});
+
+// ─── API: EOY (End-of-Year) reports ───────────────────────────────────────────
+app.post('/api/eoy-report', async (req, res) => {
+  const { specialist, school_year, schools } = req.body;
+  if (!specialist || !school_year) {
+    return res.status(400).json({ error: 'specialist and school_year are required.' });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO eoy_reports (specialist, school_year, schools)
+       VALUES ($1, $2, $3)
+       RETURNING id, submitted_at`,
+      [specialist, school_year, JSON.stringify(schools || {})]
+    );
+    res.json({ success: true, id: result.rows[0].id, submitted_at: result.rows[0].submitted_at });
+  } catch (err) {
+    console.error('POST /api/eoy-report error:', err.message);
+    res.status(500).json({ error: 'Failed to save EOY report.' });
+  }
+});
+
+app.get('/api/eoy-reports', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM eoy_reports ORDER BY submitted_at ASC`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('GET /api/eoy-reports error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch EOY reports.' });
+  }
+});
+
+// ─── API: Portfolio archive snapshots (CSV import / restore history) ─────────
+app.post('/api/archive', async (req, res) => {
+  const { label, schools } = req.body;
+  if (!schools) {
+    return res.status(400).json({ error: 'schools is required.' });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO archive_snapshots (label, schools)
+       VALUES ($1, $2)
+       RETURNING id, created_at`,
+      [label || 'Snapshot', JSON.stringify(schools)]
+    );
+    // Keep only the 10 most recent snapshots
+    await pool.query(`
+      DELETE FROM archive_snapshots
+      WHERE id NOT IN (SELECT id FROM archive_snapshots ORDER BY created_at DESC LIMIT 10)
+    `);
+    res.json({ success: true, id: result.rows[0].id, created_at: result.rows[0].created_at });
+  } catch (err) {
+    console.error('POST /api/archive error:', err.message);
+    res.status(500).json({ error: 'Failed to save archive snapshot.' });
+  }
+});
+
+app.get('/api/archive', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM archive_snapshots ORDER BY created_at DESC LIMIT 10`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('GET /api/archive error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch archive snapshots.' });
   }
 });
 
