@@ -678,14 +678,16 @@ async function initApp(){
         // Apply lever ratings
         const ratings=v.ratings||{};
         Object.entries(ratings).forEach(([levId,r])=>{
-          if(!r||!school.lr[levId]) return;
+          if(!r) return;
+          if(!school.lr[levId]) school.lr[levId]={c:null,p:false,h:[]};
           school.lr[levId].c=r;
           school.lr[levId].h.unshift({d:vDate,r:r,n:(v.notes||'').slice(0,60)});
         });
         // Apply prioritized levers
         const prioLevers=v.prioritized_levers||[];
         prioLevers.forEach(levId=>{
-          if(school.lr[levId]) school.lr[levId].p=true;
+          if(!school.lr[levId]) school.lr[levId]={c:null,p:false,h:[]};
+          school.lr[levId].p=true;
         });
         school.prioritizedLevers=prioLevers.length?prioLevers:school.prioritizedLevers;
       });
