@@ -6,11 +6,17 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// PostgreSQL connection — Railway injects DATABASE_URL automatically
+// PostgreSQL connection — Railway injects DATABASE_URL (or DATABASE_PUBLIC_URL
+// when only the public connection string was linked) automatically
+const connectionString = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  connectionString,
+  ssl: connectionString ? { rejectUnauthorized: false } : false
 });
+
+if (!connectionString) {
+  console.error('No DATABASE_URL or DATABASE_PUBLIC_URL set — DB connection will fail.');
+}
 
 // ─── Create tables on startup ─────────────────────────────────────────────────
 async function initDb() {
