@@ -679,18 +679,26 @@ async function fetchJson(url){
 
 // ═══ INIT ═══
 async function initApp(){
-  appState.schools=SCHOOLS_DATA.map(s=>Object.assign({},s,{lr:Object.assign({},s.lr)}));
+  // Default fallback roster — only used until someone uploads a portfolio CSV,
+  // after which every device loads the saved roster from the server instead.
+  appState.schools=SCHOOLS_DATA.map(s=>Object.assign({},s,{lr:{},lv:null,vc:0,prioritizedLevers:[]}));
   appState.schools.forEach((s,i)=>{appState.schoolIndex[s.n]=i;});
 
-  // Load persisted visit/BOY/EOY/archive data from the database
+  // Load persisted roster/visit/BOY/EOY/archive data from the database
   try{
-    const [visits,boyReports,eoyReports,archive,priorities]=await Promise.all([
+    const [roster,visits,boyReports,eoyReports,archive,priorities]=await Promise.all([
+      fetchJson('/api/roster'),
       fetchJson('/api/visits'),
       fetchJson('/api/boy-reports'),
       fetchJson('/api/eoy-reports'),
       fetchJson('/api/archive'),
       fetchJson('/api/priorities')
     ]);
+    if(roster&&roster.length){
+      appState.schools=roster.map(s=>Object.assign({},s,{lr:{},lv:null,vc:0,prioritizedLevers:[]}));
+      appState.schoolIndex={};
+      appState.schools.forEach((s,i)=>{appState.schoolIndex[s.n]=i;});
+    }
     appState.eoyReports=eoyReports.map(r=>({specialist:r.specialist,schoolYear:r.school_year,submittedAt:r.submitted_at,schools:r.schools||{}}));
     appState.archive=archive.map(a=>({label:a.label,ts:a.created_at,schools:a.schools}));
 
@@ -2081,9 +2089,25 @@ function applyPortfolioUpload(rows) {
   });
   appState.schoolIndex = {};
   appState.schools.forEach((s,i) => { appState.schoolIndex[s.n] = i; });
+  saveRoster();
   showView('landing');
   renderLanding();
   renderForm();
+}
+
+// Persist the roster (static/demographic fields + specialist assignment) so
+// every device loads the same set of schools. Ratings/visit-derived fields
+// are stripped — those stay sourced from the visit/BOY/priority replay so
+// they can't ever get double-applied or go stale relative to it.
+function saveRoster(){
+  const stripped=appState.schools.map(s=>Object.assign({},s,{lr:{},lv:null,vc:0,prioritizedLevers:[]}));
+  fetch('/api/roster',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({schools:stripped})
+  }).then(res=>{
+    if(!res.ok) console.warn('Roster save failed (kept on this device only): server returned',res.status);
+  }).catch(e=>console.warn('Roster save failed (kept on this device only):',e));
 }
 
 function archiveCurrentData(label) {
@@ -2114,11 +2138,12 @@ function restoreArchive(idx) {
   try {
     const entry = (appState.archive||[])[idx];
     if (!entry) return;
-    if (!confirm('Restore "'+entry.label+'" ('+entry.schools.length+' schools)?\n\nCurrent data will be archived first. Note: restoring only affects this device — other devices keep replaying visit/BOY history as usual.')) return;
+    if (!confirm('Restore "'+entry.label+'" ('+entry.schools.length+' schools)?\n\nCurrent data will be archived first. The restored school list will sync to other devices, but ratings/visit history always come from the visit and BOY/EOY log, not from this snapshot.')) return;
     archiveCurrentData('Pre-restore snapshot — '+appState.schools.length+' schools');
     appState.schools = entry.schools;
     appState.schoolIndex = {};
     appState.schools.forEach((s,i) => { appState.schoolIndex[s.n] = i; });
+    saveRoster();
     showView('landing');
     renderLanding();
     renderForm();

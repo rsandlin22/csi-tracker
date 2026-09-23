@@ -81,6 +81,18 @@ async function initDb() {
     )
   `);
 
+  // Single current roster — replaced wholesale each time a portfolio CSV is
+  // uploaded, so every device starts from the same set of schools instead of
+  // each one falling back to the hardcoded default list.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS roster_snapshot (
+      id         INTEGER PRIMARY KEY DEFAULT 1,
+      schools    JSONB   NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      CONSTRAINT single_row CHECK (id = 1)
+    )
+  `);
+
   console.log('Database ready.');
 }
 
@@ -224,6 +236,36 @@ app.get('/api/eoy-reports', async (req, res) => {
   } catch (err) {
     console.error('GET /api/eoy-reports error:', err.message);
     res.status(500).json({ error: 'Failed to fetch EOY reports.' });
+  }
+});
+
+// ─── API: Current school roster (set by portfolio CSV upload) ────────────────
+app.post('/api/roster', async (req, res) => {
+  const { schools } = req.body;
+  if (!Array.isArray(schools)) {
+    return res.status(400).json({ error: 'schools (array) is required.' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO roster_snapshot (id, schools, updated_at)
+       VALUES (1, $1, NOW())
+       ON CONFLICT (id) DO UPDATE SET schools = $1, updated_at = NOW()`,
+      [JSON.stringify(schools)]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/roster error:', err.message);
+    res.status(500).json({ error: 'Failed to save roster.' });
+  }
+});
+
+app.get('/api/roster', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT schools FROM roster_snapshot WHERE id = 1`);
+    res.json(result.rows[0] ? result.rows[0].schools : null);
+  } catch (err) {
+    console.error('GET /api/roster error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch roster.' });
   }
 });
 
