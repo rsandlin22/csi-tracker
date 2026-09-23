@@ -63,6 +63,16 @@ async function initDb() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS priority_flags (
+      school_name  TEXT        NOT NULL,
+      lever_id     TEXT        NOT NULL,
+      prioritized  BOOLEAN     NOT NULL,
+      updated_at   TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (school_name, lever_id)
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS archive_snapshots (
       id           SERIAL PRIMARY KEY,
       label        TEXT        NOT NULL,
@@ -214,6 +224,36 @@ app.get('/api/eoy-reports', async (req, res) => {
   } catch (err) {
     console.error('GET /api/eoy-reports error:', err.message);
     res.status(500).json({ error: 'Failed to fetch EOY reports.' });
+  }
+});
+
+// ─── API: Priority-focus-strand toggles ───────────────────────────────────────
+app.post('/api/priority', async (req, res) => {
+  const { school_name, lever_id, prioritized } = req.body;
+  if (!school_name || !lever_id || typeof prioritized !== 'boolean') {
+    return res.status(400).json({ error: 'school_name, lever_id, and prioritized (boolean) are required.' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO priority_flags (school_name, lever_id, prioritized, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (school_name, lever_id) DO UPDATE SET prioritized = $3, updated_at = NOW()`,
+      [school_name, lever_id, prioritized]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /api/priority error:', err.message);
+    res.status(500).json({ error: 'Failed to save priority flag.' });
+  }
+});
+
+app.get('/api/priorities', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT school_name, lever_id, prioritized FROM priority_flags`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('GET /api/priorities error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch priority flags.' });
   }
 });
 

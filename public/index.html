@@ -684,11 +684,12 @@ async function initApp(){
 
   // Load persisted visit/BOY/EOY/archive data from the database
   try{
-    const [visits,boyReports,eoyReports,archive]=await Promise.all([
+    const [visits,boyReports,eoyReports,archive,priorities]=await Promise.all([
       fetchJson('/api/visits'),
       fetchJson('/api/boy-reports'),
       fetchJson('/api/eoy-reports'),
-      fetchJson('/api/archive')
+      fetchJson('/api/archive'),
+      fetchJson('/api/priorities')
     ]);
     appState.eoyReports=eoyReports.map(r=>({specialist:r.specialist,schoolYear:r.school_year,submittedAt:r.submitted_at,schools:r.schools||{}}));
     appState.archive=archive.map(a=>({label:a.label,ts:a.created_at,schools:a.schools}));
@@ -735,6 +736,14 @@ async function initApp(){
         school.lr[levId].p=true;
       });
       school.prioritizedLevers=prioLevers.length?prioLevers:school.prioritizedLevers;
+    });
+
+    // Manual priority-toggle overrides win last — they're the most explicit signal.
+    priorities.forEach(({school_name,lever_id,prioritized})=>{
+      const school=appState.schools.find(s=>s.n===school_name);
+      if(!school) return;
+      if(!school.lr[lever_id]) school.lr[lever_id]={c:null,p:false,h:[]};
+      school.lr[lever_id].p=prioritized;
     });
   }catch(e){
     console.warn('Could not load saved data (running locally or DB unavailable):',e);
@@ -1519,6 +1528,13 @@ function togglePriority(schoolName,levId){
   const school=appState.schools.find(s=>s.n===schoolName);
   if(!school) return;
   school.lr[levId].p=!school.lr[levId].p;
+  fetch('/api/priority',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({school_name:schoolName,lever_id:levId,prioritized:school.lr[levId].p})
+  }).then(res=>{
+    if(!res.ok) console.warn('Priority save failed (kept on this device only): server returned',res.status);
+  }).catch(e=>console.warn('Priority save failed (kept on this device only):',e));
   const t=document.getElementById('priorityToggle');
   if(t) t.classList.toggle('on');
   if(currentSpecialist){renderSpecTable(currentSpecialist);renderSpecSummary(currentSpecialist);}
